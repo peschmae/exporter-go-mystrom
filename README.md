@@ -1,6 +1,6 @@
 # myStrom prometheus exporter
 
-Export [myStrom WiFi Switch]https://mystrom.ch/de/wifi-switch-ch/) report
+Export [myStrom WiFi Switch](https://mystrom.ch/de/wifi-switch-ch/) report
 statistics to [Prometheus](https://prometheus.io).
 
 Metrics are retrieved using the [switch REST api](https://api.mystrom.ch/).
