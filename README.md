@@ -44,5 +44,16 @@ Using the make file, you can easily build for the following architectures, those
 Since go is cross compatible with windows, and mac arm as well, you should be able to build the binary for those as well, but they aren't tested.  
 The docker image is only built & tested for amd64.
 
+## Packages
+Packages are built automatically on release, and container images on push to the main branch.
+
+Take a look at the `Releases` or `Packages` tabs on Github.  
+
+### Container images
+There is a multiplatform build available here https://github.com/peschmae/exporter-go-mystrom/pkgs/container/exporter-go-mystrom
+```
+docker pull ghcr.io/peschmae/exporter-go-mystrom:latest
+```
+
 ## License
 MIT License, See the included LICENSE file for terms and conditions.
