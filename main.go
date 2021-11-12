@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type switchReport struct {
@@ -87,6 +88,8 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 func (e *Exporter) FetchSwitchMetrics(switchIP string, ch chan<- prometheus.Metric) {
 
+	log.Printf("Trying to connect to switch at: %s\n", switchIP)
+
 	url := "http://" + switchIP + "/report"
 
 	switchClient := http.Client{
@@ -104,6 +107,7 @@ func (e *Exporter) FetchSwitchMetrics(switchIP string, ch chan<- prometheus.Metr
 
 	res, getErr := switchClient.Do(req)
 	if getErr != nil {
+		fmt.Printf("Error while trying to connect to switch: %v\n", getErr)
 		ch <- prometheus.MustNewConstMetric(
 			up, prometheus.GaugeValue, 0,
 		)
@@ -159,6 +163,10 @@ func main() {
 
 	flag.Parse()
 
+	if *switchIP == "" {
+		log.Fatal("No switch.ip-address provided")
+	}
+
 	exporter := NewExporter(*switchIP)
 	prometheus.MustRegister(exporter)
 
@@ -172,5 +180,7 @@ func main() {
              </body>
              </html>`))
 	})
+
+	log.Printf("Starting listener on %s\n", *listenAddress)
 	log.Fatal(http.ListenAndServe(*listenAddress, nil))
 }
