@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -88,47 +89,10 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 func (e *Exporter) FetchSwitchMetrics(switchIP string, ch chan<- prometheus.Metric) {
 
-	log.Printf("Trying to connect to switch at: %s\n", switchIP)
+	report, err := FetchReport(switchIP)
 
-	url := "http://" + switchIP + "/report"
-
-	switchClient := http.Client{
-		Timeout: time.Second * 5, // 3 second timeout, might need to be increased
-	}
-
-	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		ch <- prometheus.MustNewConstMetric(
-			up, prometheus.GaugeValue, 0,
-		)
-	}
-
-	req.Header.Set("User-Agent", "myStrom-exporter")
-
-	res, getErr := switchClient.Do(req)
-	if getErr != nil {
-		fmt.Printf("Error while trying to connect to switch: %v\n", getErr)
-		ch <- prometheus.MustNewConstMetric(
-			up, prometheus.GaugeValue, 0,
-		)
-
-	}
-
-	if res.Body != nil {
-		defer res.Body.Close()
-	}
-
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		ch <- prometheus.MustNewConstMetric(
-			up, prometheus.GaugeValue, 0,
-		)
-	}
-
-	report := switchReport{}
-	err = json.Unmarshal(body, &report)
-	if err != nil {
-		fmt.Println(err)
+		log.Printf("Error occured, while fetching metrics: %s", err)
 		ch <- prometheus.MustNewConstMetric(
 			up, prometheus.GaugeValue, 0,
 		)
@@ -159,12 +123,56 @@ func (e *Exporter) FetchSwitchMetrics(switchIP string, ch chan<- prometheus.Metr
 
 }
 
+func FetchReport(switchIP string) (*switchReport, error) {
+	log.Printf("Trying to connect to switch at: %s\n", switchIP)
+	url := "http://" + switchIP + "/report"
+
+	switchClient := http.Client{
+		Timeout: time.Second * 5, // 3 second timeout, might need to be increased
+	}
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", "myStrom-exporter")
+
+	res, getErr := switchClient.Do(req)
+	if getErr != nil {
+		log.Printf("Error while trying to connect to switch: %s\n", getErr)
+		return nil, getErr
+
+	}
+
+	if res.Body != nil {
+		defer res.Body.Close()
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		log.Printf("Error while reading body: %s\n", readErr)
+		return nil, readErr
+	}
+
+	report := switchReport{}
+	err = json.Unmarshal(body, &report)
+	if err != nil {
+		log.Printf("Error while unmarshaling report: %s\n", err)
+		return nil, err
+	}
+
+	return &report, nil
+}
+
 func main() {
 
 	flag.Parse()
 
 	if *switchIP == "" {
-		log.Fatal("No switch.ip-address provided")
+		flag.Usage()
+		fmt.Println("\nNo switch.ip-address provided")
+		os.Exit(1)
 	}
 
 	exporter := NewExporter(*switchIP)
@@ -180,6 +188,11 @@ func main() {
              </body>
              </html>`))
 	})
+
+	_, err := FetchReport(*switchIP)
+	if err != nil {
+		log.Fatalf("Switch at address %s couldn't be reached. Ensure it is reachable before starting the exporter", *switchIP)
+	}
 
 	log.Printf("Starting listener on %s\n", *listenAddress)
 	log.Fatal(http.ListenAndServe(*listenAddress, nil))
