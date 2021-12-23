@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
@@ -69,7 +70,7 @@ func main() {
 	// -- create a new registry for the exporter telemetry
 	telemetryRegistry := setupMetrics()
 
-	router := http.NewServeMux()
+	router := mux.NewRouter()
 	router.Handle(*metricsPath, promhttp.HandlerFor(telemetryRegistry, promhttp.HandlerOpts{}))
 	router.HandleFunc(*devicePath, scrapeHandler)
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
