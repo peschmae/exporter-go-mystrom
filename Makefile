@@ -1,6 +1,7 @@
 ##
 #
 .DEFAULT_GOAL := help
+.PHONY: generate
 
 version    := $(shell git describe --tags --always)
 revision   := $(shell git rev-parse HEAD)
@@ -18,16 +19,23 @@ LDFLAGS   := -w -s \
 	-X $(versionPkgPrefix).BuildDate=${builddate}
 GOFLAGS   := -v
 
-linux: ## builds the linux version of the exporter
+linux: generate ## builds the linux version of the exporter
 	GOOS=linux GOARCH=amd64 go build $(GOFLAGS) -ldflags '$(LDFLAGS)'
-mac: ## builds the macos version of the exporter
+mac: generate ## builds the macos version of the exporter
 	GOOS=darwin GOARCH=amd64 go build $(GOFLAGS) -ldflags '$(LDFLAGS)'
-mac-arm: ## builds the macos (m1) version of the exporter
+mac-arm: generate ## builds the macos (m1) version of the exporter
 	GOOS=darwin GOARCH=arm64 go build $(GOFLAGS) -ldflags '$(LDFLAGS)'
-arm64:
+arm64: generate
 	GOOS=linux GOARCH=arm64 go build $(GOFLAGS) -ldflags '$(LDFLAGS)'
-arm:
+arm: generate
 	GOOS=linux GOARCH=arm go build $(GOFLAGS) -ldflags '$(LDFLAGS)'
+
+# -- see more info on https://pkg.go.dev/golang.org/x/tools/cmd/stringer
+generate: $(GOPATH)/bin/stringer
+	go generate ./...
+
+$(GOPATH)/bin/stringer:
+	go install golang.org/x/tools/cmd/stringer@latest
 
 # --
 help:

@@ -1,3 +1,4 @@
+//go:generate stringer -type MystromReqStatus main.go
 package main
 
 import (
@@ -16,14 +17,15 @@ import (
 	"mystrom-exporter/pkg/version"
 )
 
-type switchReport struct {
-	Power       float64 `json:"power"`
-	WattPerSec  float64 `json:"Ws"`
-	Relay       bool    `json:"relay"`
-	Temperature float64 `json:"temperature"`
-}
+// -- MystromRequestStatusType represents the request to MyStrom device status
+type MystromReqStatus uint32
 
-const namespace = "mystrom"
+const (
+	OK MystromReqStatus = iota
+	ERROR_SOCKET
+	ERROR_TIMEOUT
+	ERROR_PARSING_VALUE
+)
 
 var (
 	listenAddress = flag.String("web.listen-address", ":9452",
@@ -65,6 +67,12 @@ func main() {
 		Help: "Total duration of mystrom successful requests by target in seconds",
 	}, []string{"target"})
 	telemetryRegistry.MustRegister(mystromDurationCounterVec)
+
+	mystromRequestsCounterVec = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "mystrom_requests_total",
+		Help: "Number of mystrom request by status and target",
+	}, []string{"target", "status"})
+	telemetryRegistry.MustRegister(mystromRequestsCounterVec)
 
 	// -- make the build information is available through a metric
 	buildInfo := prometheus.NewGaugeVec(
@@ -115,7 +123,11 @@ func scrapeHandler(e *mystrom.Exporter, w http.ResponseWriter, r *http.Request) 
 	duration := time.Since(start).Seconds()
 	if err != nil {
 		if strings.Contains(fmt.Sprintf("%v", err), "unable to connect with target") {
+			mystromRequestsCounterVec.WithLabelValues(target, ERROR_SOCKET.String()).Inc()
 		} else if strings.Contains(fmt.Sprintf("%v", err), "i/o timeout") {
+			mystromRequestsCounterVec.WithLabelValues(target, ERROR_TIMEOUT.String()).Inc()
+		} else {
+			mystromRequestsCounterVec.WithLabelValues(target, ERROR_PARSING_VALUE.String()).Inc()
 		}
 		http.Error(
 			w,
@@ -126,6 +138,7 @@ func scrapeHandler(e *mystrom.Exporter, w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	mystromDurationCounterVec.WithLabelValues(target).Add(duration)
+	mystromRequestsCounterVec.WithLabelValues(target, OK.String()).Inc()
 
 	promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}).ServeHTTP(w, r)
 
