@@ -12,6 +12,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"mystrom-exporter/pkg/version"
 )
 
 type switchReport struct {
@@ -30,6 +32,8 @@ var (
 		"Path under which to expose metrics")
 	switchIP = flag.String("switch.ip-address", "",
 		"IP address of the switch you try to monitor")
+	showVersion = flag.Bool("version", false,
+		"Show version information.")
 
 	up = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "up"),
@@ -169,14 +173,36 @@ func main() {
 
 	flag.Parse()
 
+	// Show version information
+	if *showVersion {
+		v, err := version.Print("mystrom_exporter")
+		if err != nil {
+			log.Fatalf("Failed to print version information: %#v", err)
+		}
+
+		fmt.Fprintln(os.Stdout, v)
+		os.Exit(0)
+	}
+
 	if *switchIP == "" {
 		flag.Usage()
 		fmt.Println("\nNo switch.ip-address provided")
 		os.Exit(1)
 	}
 
+	// make the build information is available through a metric
+	buildInfo := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "scripts",
+			Name:      "build_info",
+			Help:      "A metric with a constant '1' value labeled by build information.",
+		},
+		[]string{"version", "revision", "branch", "goversion", "builddate", "builduser"},
+	)
+	buildInfo.WithLabelValues(version.Version, version.Revision, version.Branch, version.GoVersion, version.BuildDate, version.BuildUser).Set(1)
+
 	exporter := NewExporter(*switchIP)
-	prometheus.MustRegister(exporter)
+	prometheus.MustRegister(exporter, buildInfo)
 
 	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
