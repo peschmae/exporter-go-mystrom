@@ -41,6 +41,13 @@ var (
 	mystromDurationCounterVec *prometheus.CounterVec
 	mystromRequestsCounterVec *prometheus.CounterVec
 )
+var landingPage = []byte(`<html>
+<head><title>myStrom switch report Exporter</title></head>
+<body>
+<h1>myStrom Exporter</h1>
+<p><a href='` + *metricsPath + `'>Metrics</a></p>
+</body>
+</html>`)
 
 func main() {
 
@@ -97,13 +104,7 @@ func main() {
 		}),
 	)
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<html>
-			<head><title>myStrom switch report Exporter</title></head>
-			<body>
-			<h1>myStrom Exporter</h1>
-			<p><a href='` + *metricsPath + `'>Metrics</a></p>
-			</body>
-			</html>`))
+		w.Write(landingPage)
 	})
 	log.Infoln("Listening on address " + *listenAddress)
 	log.Fatal(http.ListenAndServe(*listenAddress, router))

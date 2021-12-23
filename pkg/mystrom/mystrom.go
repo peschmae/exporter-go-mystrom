@@ -15,8 +15,8 @@ const namespace = "mystrom"
 type switchReport struct {
 	Power       float64 `json:"power"`
 	WattPerSec  float64 `json:"Ws"`
-	Relay       bool    `json:relay`
-	Temperature float64 `json:"temperature`
+	Relay       bool    `json:"relay"`
+	Temperature float64 `json:"temperature"`
 }
 
 type Exporter struct {
