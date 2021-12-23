@@ -27,6 +27,8 @@ const (
 	ERROR_PARSING_VALUE
 )
 
+const namespace = "mystrom_exporter"
+
 var (
 	listenAddress = flag.String("web.listen-address", ":9452",
 		"Address to listen on")
@@ -65,44 +67,11 @@ func main() {
 	}
 
 	// -- create a new registry for the exporter telemetry
-	telemetryRegistry := prometheus.NewRegistry()
-	telemetryRegistry.MustRegister(prometheus.NewGoCollector())
-	telemetryRegistry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-
-	mystromDurationCounterVec = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "mystrom_request_duration_seconds_total",
-		Help: "Total duration of mystrom successful requests by target in seconds",
-	}, []string{"target"})
-	telemetryRegistry.MustRegister(mystromDurationCounterVec)
-
-	mystromRequestsCounterVec = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "mystrom_requests_total",
-		Help: "Number of mystrom request by status and target",
-	}, []string{"target", "status"})
-	telemetryRegistry.MustRegister(mystromRequestsCounterVec)
-
-	// -- make the build information is available through a metric
-	buildInfo := prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "scripts",
-			Name:      "build_info",
-			Help:      "A metric with a constant '1' value labeled by build information.",
-		},
-		[]string{"version", "revision", "branch", "goversion", "builddate", "builduser"},
-	)
-	buildInfo.WithLabelValues(version.Version, version.Revision, version.Branch, version.GoVersion, version.BuildDate, version.BuildUser).Set(1)
-	telemetryRegistry.MustRegister(buildInfo)
-
-	exporter := mystrom.NewExporter()
-	// prometheus.MustRegister(exporter)
+	telemetryRegistry := setupMetrics()
 
 	router := http.NewServeMux()
 	router.Handle(*metricsPath, promhttp.HandlerFor(telemetryRegistry, promhttp.HandlerOpts{}))
-	router.Handle(*devicePath,
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			scrapeHandler(exporter, w, r)
-		}),
-	)
+	router.HandleFunc(*devicePath, scrapeHandler)
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write(landingPage)
 	})
@@ -110,7 +79,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(*listenAddress, router))
 }
 
-func scrapeHandler(e *mystrom.Exporter, w http.ResponseWriter, r *http.Request) {
+func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	target := r.URL.Query().Get("target")
 	if target == "" {
 		http.Error(w, "'target' parameter must be specified", http.StatusBadRequest)
@@ -118,9 +87,10 @@ func scrapeHandler(e *mystrom.Exporter, w http.ResponseWriter, r *http.Request) 
 	}
 
 	log.Infof("got scrape request for target '%v'", target)
+	exporter := mystrom.NewExporter(target)
 
 	start := time.Now()
-	gatherer, err := e.Scrape(target)
+	gatherer, err := exporter.Scrape()
 	duration := time.Since(start).Seconds()
 	if err != nil {
 		if strings.Contains(fmt.Sprintf("%v", err), "unable to connect with target") {
@@ -142,5 +112,43 @@ func scrapeHandler(e *mystrom.Exporter, w http.ResponseWriter, r *http.Request) 
 	mystromRequestsCounterVec.WithLabelValues(target, OK.String()).Inc()
 
 	promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}).ServeHTTP(w, r)
+}
 
+// -- setupMetrics creates a new registry for the exporter telemetry
+func setupMetrics() *prometheus.Registry {
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(prometheus.NewGoCollector())
+	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+
+	mystromDurationCounterVec = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "request_duration_seconds_total",
+			Help:      "Total duration of mystrom successful requests by target in seconds",
+		},
+		[]string{"target"})
+	registry.MustRegister(mystromDurationCounterVec)
+
+	mystromRequestsCounterVec = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "requests_total",
+			Help:      "Number of mystrom request by status and target",
+		},
+		[]string{"target", "status"})
+	registry.MustRegister(mystromRequestsCounterVec)
+
+	// -- make the build information is available through a metric
+	buildInfo := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "build_info",
+			Help:      "A metric with a constant '1' value labeled by build information.",
+		},
+		[]string{"version", "revision", "branch", "goversion", "builddate", "builduser"},
+	)
+	buildInfo.WithLabelValues(version.Version, version.Revision, version.Branch, version.GoVersion, version.BuildDate, version.BuildUser).Set(1)
+	registry.MustRegister(buildInfo)
+
+	return registry
 }
