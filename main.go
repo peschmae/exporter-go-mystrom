@@ -5,13 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/log"
 
 	"mystrom-exporter/pkg/version"
 )
@@ -96,7 +96,7 @@ func (e *Exporter) FetchSwitchMetrics(switchIP string, ch chan<- prometheus.Metr
 	report, err := FetchReport(switchIP)
 
 	if err != nil {
-		log.Printf("Error occured, while fetching metrics: %s", err)
+		log.Infof("Error occured, while fetching metrics: %s", err)
 		ch <- prometheus.MustNewConstMetric(
 			up, prometheus.GaugeValue, 0,
 		)
@@ -128,7 +128,7 @@ func (e *Exporter) FetchSwitchMetrics(switchIP string, ch chan<- prometheus.Metr
 }
 
 func FetchReport(switchIP string) (*switchReport, error) {
-	log.Printf("Trying to connect to switch at: %s\n", switchIP)
+	log.Infof("Trying to connect to switch at: %s", switchIP)
 	url := "http://" + switchIP + "/report"
 
 	switchClient := http.Client{
@@ -144,7 +144,7 @@ func FetchReport(switchIP string) (*switchReport, error) {
 
 	res, getErr := switchClient.Do(req)
 	if getErr != nil {
-		log.Printf("Error while trying to connect to switch: %s\n", getErr)
+		log.Infof("Error while trying to connect to switch: %s", getErr)
 		return nil, getErr
 
 	}
@@ -155,14 +155,14 @@ func FetchReport(switchIP string) (*switchReport, error) {
 
 	body, readErr := ioutil.ReadAll(res.Body)
 	if readErr != nil {
-		log.Printf("Error while reading body: %s\n", readErr)
+		log.Infof("Error while reading body: %s", readErr)
 		return nil, readErr
 	}
 
 	report := switchReport{}
 	err = json.Unmarshal(body, &report)
 	if err != nil {
-		log.Printf("Error while unmarshaling report: %s\n", err)
+		log.Infof("Error while unmarshaling report: %s", err)
 		return nil, err
 	}
 
@@ -220,6 +220,6 @@ func main() {
 		log.Fatalf("Switch at address %s couldn't be reached. Ensure it is reachable before starting the exporter", *switchIP)
 	}
 
-	log.Printf("Starting listener on %s\n", *listenAddress)
+	log.Infoln("Listening on address " + *listenAddress)
 	log.Fatal(http.ListenAndServe(*listenAddress, nil))
 }
