@@ -22,6 +22,8 @@ linux: ## builds the linux version of the exporter
 	GOOS=linux GOARCH=amd64 go build $(GOFLAGS) -ldflags '$(LDFLAGS)'
 mac: ## builds the macos version of the exporter
 	GOOS=darwin GOARCH=amd64 go build $(GOFLAGS) -ldflags '$(LDFLAGS)'
+mac-arm: ## builds the macos (m1) version of the exporter
+	GOOS=darwin GOARCH=arm64 go build $(GOFLAGS) -ldflags '$(LDFLAGS)'
 arm64:
 	GOOS=linux GOARCH=arm64 go build $(GOFLAGS) -ldflags '$(LDFLAGS)'
 arm:
