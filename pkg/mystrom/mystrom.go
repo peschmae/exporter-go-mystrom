@@ -144,7 +144,7 @@ func registerMetrics(reg prometheus.Registerer, data switchReport, target string
 			Name:      "relay",
 			Help:      "The current state of the relay (wether or not the relay is currently turned on)",
 		},
-		[]string{"target"})
+		[]string{"instance"})
 
 	if err := reg.Register(collectorRelay); err != nil {
 		return fmt.Errorf("failed to register metric %v: %v", "relay", err.Error())
@@ -164,7 +164,7 @@ func registerMetrics(reg prometheus.Registerer, data switchReport, target string
 				Name:      "power",
 				Help:      "The current power consumed by devices attached to the switch",
 			},
-			[]string{"target"})
+			[]string{"instance"})
 
 		if err := reg.Register(collectorPower); err != nil {
 			return fmt.Errorf("failed to register metric %v: %v", "power", err.Error())
@@ -179,7 +179,7 @@ func registerMetrics(reg prometheus.Registerer, data switchReport, target string
 				Name:      "temperature",
 				Help:      "The currently measured temperature by the switch. (Might initially be wrong, but will automatically correct itself over the span of a few hours)",
 			},
-			[]string{"target"})
+			[]string{"instance"})
 
 		if err := reg.Register(collectorTemperature); err != nil {
 			return fmt.Errorf("failed to register metric %v: %v", "temperature", err.Error())
@@ -200,9 +200,9 @@ func registerInfoMetrics(reg prometheus.Registerer, data switchInfo, target stri
 		prometheus.GaugeOpts{
 			Namespace: namespace,
 			Name:      "info",
-			Help:      "",
+			Help:      "general information about the device",
 		},
-		[]string{"target", "version", "mac", "type", "ssid"})
+		[]string{"instance", "version", "mac", "type", "ssid"})
 
 	if err := reg.Register(collectorInfo); err != nil {
 		return fmt.Errorf("failed to register metric %v: %v", "info", err.Error())
