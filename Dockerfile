@@ -2,7 +2,7 @@ FROM golang:alpine as build
 
 WORKDIR /root
 COPY . /root
-RUN go build .
+RUN go generate ./... && go build .
 
 FROM alpine:latest
 
