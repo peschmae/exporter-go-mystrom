@@ -6,7 +6,7 @@ RUN go install golang.org/x/tools/cmd/stringer@latest && go generate ./... && go
 
 FROM alpine:latest
 
-ENV SWITCH_IP_ADDRESS="192.168.10.10" LISTEN_ADDRESS="0.0.0.0" LISTEN_PORT="9452"
+ENV LISTEN_ADDRESS="0.0.0.0" LISTEN_PORT="9452"
 
 RUN addgroup -S mystrom \
     && adduser -S mystrom -G mystrom \
@@ -17,4 +17,4 @@ WORKDIR /app
 USER mystrom
 COPY --from=build /root/mystrom-exporter /app
 
-CMD /app/mystrom-exporter -web.listen-address $LISTEN_ADDRESS:$LISTEN_PORT -switch.ip-address $SWITCH_IP_ADDRESS
+CMD /app/mystrom-exporter -web.listen-address $LISTEN_ADDRESS:$LISTEN_PORT
