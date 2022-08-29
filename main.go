@@ -1,199 +1,155 @@
+//go:generate stringer -type MystromReqStatus main.go
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/log"
+
+	"mystrom-exporter/pkg/mystrom"
+	"mystrom-exporter/pkg/version"
 )
 
-type switchReport struct {
-	Power       float64 `json:"power"`
-	WattPerSec  float64 `json:"Ws"`
-	Relay       bool    `json:relay`
-	Temperature float64 `json:"temperature`
-}
+// -- MystromRequestStatusType represents the request to MyStrom device status
+type MystromReqStatus uint32
 
-const namespace = "mystrom"
+const (
+	OK MystromReqStatus = iota
+	ERROR_SOCKET
+	ERROR_TIMEOUT
+	ERROR_PARSING_VALUE
+)
+
+const namespace = "mystrom_exporter"
 
 var (
 	listenAddress = flag.String("web.listen-address", ":9452",
 		"Address to listen on")
 	metricsPath = flag.String("web.metrics-path", "/metrics",
-		"Path under which to expose metrics")
-	switchIP = flag.String("switch.ip-address", "",
-		"IP address of the switch you try to monitor")
-
-	up = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "", "up"),
-		"Was the last myStrom query successful.",
-		nil, nil,
-	)
-	myStromPower = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "", "report_power"),
-		"The current power consumed by devices attached to the switch",
-		nil, nil,
-	)
-
-	myStromRelay = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "", "report_relay"),
-		"The current state of the relay (wether or not the relay is currently turned on)",
-		nil, nil,
-	)
-
-	myStromTemperature = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "", "report_temperatur"),
-		"The currently measured temperature by the switch. (Might initially be wrong, but will automatically correct itself over the span of a few hours)",
-		nil, nil,
-	)
-
-	myStromWattPerSec = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "", "report_watt_per_sec"),
-		"The average of energy consumed per second from last call this request",
-		nil, nil,
-	)
+		"Path under which to expose exporters own metrics")
+	devicePath = flag.String("web.device-path", "/device",
+		"Path under which the metrics of the devices are fetched")
+	showVersion = flag.Bool("version", false,
+		"Show version information.")
 )
-
-type Exporter struct {
-	myStromSwitchIp string
-}
-
-func NewExporter(myStromSwitchIp string) *Exporter {
-	return &Exporter{
-		myStromSwitchIp: myStromSwitchIp,
-	}
-}
-
-func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
-	ch <- up
-	ch <- myStromPower
-	ch <- myStromRelay
-	ch <- myStromTemperature
-	ch <- myStromWattPerSec
-}
-
-func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-	ch <- prometheus.MustNewConstMetric(
-		up, prometheus.GaugeValue, 1,
-	)
-
-	e.FetchSwitchMetrics(e.myStromSwitchIp, ch)
-}
-
-func (e *Exporter) FetchSwitchMetrics(switchIP string, ch chan<- prometheus.Metric) {
-
-	report, err := FetchReport(switchIP)
-
-	if err != nil {
-		log.Printf("Error occured, while fetching metrics: %s", err)
-		ch <- prometheus.MustNewConstMetric(
-			up, prometheus.GaugeValue, 0,
-		)
-		return
-	}
-
-	ch <- prometheus.MustNewConstMetric(
-		myStromPower, prometheus.GaugeValue, report.Power,
-	)
-
-	if report.Relay {
-		ch <- prometheus.MustNewConstMetric(
-			myStromRelay, prometheus.GaugeValue, 1,
-		)
-	} else {
-		ch <- prometheus.MustNewConstMetric(
-			myStromRelay, prometheus.GaugeValue, 0,
-		)
-	}
-
-	ch <- prometheus.MustNewConstMetric(
-		myStromWattPerSec, prometheus.GaugeValue, report.WattPerSec,
-	)
-
-	ch <- prometheus.MustNewConstMetric(
-		myStromTemperature, prometheus.GaugeValue, report.Temperature,
-	)
-
-}
-
-func FetchReport(switchIP string) (*switchReport, error) {
-	log.Printf("Trying to connect to switch at: %s\n", switchIP)
-	url := "http://" + switchIP + "/report"
-
-	switchClient := http.Client{
-		Timeout: time.Second * 5, // 3 second timeout, might need to be increased
-	}
-
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("User-Agent", "myStrom-exporter")
-
-	res, getErr := switchClient.Do(req)
-	if getErr != nil {
-		log.Printf("Error while trying to connect to switch: %s\n", getErr)
-		return nil, getErr
-
-	}
-
-	if res.Body != nil {
-		defer res.Body.Close()
-	}
-
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		log.Printf("Error while reading body: %s\n", readErr)
-		return nil, readErr
-	}
-
-	report := switchReport{}
-	err = json.Unmarshal(body, &report)
-	if err != nil {
-		log.Printf("Error while unmarshaling report: %s\n", err)
-		return nil, err
-	}
-
-	return &report, nil
-}
+var (
+	mystromDurationCounterVec *prometheus.CounterVec
+	mystromRequestsCounterVec *prometheus.CounterVec
+)
+var landingPage = []byte(`<html>
+<head><title>myStrom switch report Exporter</title></head>
+<body>
+<h1>myStrom Exporter</h1>
+<p><a href='` + *metricsPath + `'>Metrics</a></p>
+</body>
+</html>`)
 
 func main() {
 
 	flag.Parse()
 
-	if *switchIP == "" {
-		flag.Usage()
-		fmt.Println("\nNo switch.ip-address provided")
-		os.Exit(1)
+	// -- show version information
+	if *showVersion {
+		v, err := version.Print("mystrom_exporter")
+		if err != nil {
+			log.Fatalf("Failed to print version information: %#v", err)
+		}
+
+		fmt.Fprintln(os.Stdout, v)
+		os.Exit(0)
 	}
 
-	exporter := NewExporter(*switchIP)
-	prometheus.MustRegister(exporter)
+	// -- create a new registry for the exporter telemetry
+	telemetryRegistry := setupMetrics()
 
-	http.Handle(*metricsPath, promhttp.Handler())
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<html>
-             <head><title>myStrom switch report Exporter</title></head>
-             <body>
-             <h1>myStrom Exporter</h1>
-             <p><a href='` + *metricsPath + `'>Metrics</a></p>
-             </body>
-             </html>`))
+	router := mux.NewRouter()
+	router.Handle(*metricsPath, promhttp.HandlerFor(telemetryRegistry, promhttp.HandlerOpts{}))
+	router.HandleFunc(*devicePath, scrapeHandler)
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write(landingPage)
 	})
+	log.Infoln("Listening on address " + *listenAddress)
+	log.Fatal(http.ListenAndServe(*listenAddress, router))
+}
 
-	_, err := FetchReport(*switchIP)
-	if err != nil {
-		log.Fatalf("Switch at address %s couldn't be reached. Ensure it is reachable before starting the exporter", *switchIP)
+func scrapeHandler(w http.ResponseWriter, r *http.Request) {
+	target := r.URL.Query().Get("target")
+	if target == "" {
+		http.Error(w, "'target' parameter must be specified", http.StatusBadRequest)
+		return
 	}
 
-	log.Printf("Starting listener on %s\n", *listenAddress)
-	log.Fatal(http.ListenAndServe(*listenAddress, nil))
+	log.Infof("got scrape request for target '%v'", target)
+	exporter := mystrom.NewExporter(target)
+
+	start := time.Now()
+	gatherer, err := exporter.Scrape()
+	duration := time.Since(start).Seconds()
+	if err != nil {
+		if strings.Contains(fmt.Sprintf("%v", err), "unable to connect with target") {
+			mystromRequestsCounterVec.WithLabelValues(target, ERROR_SOCKET.String()).Inc()
+		} else if strings.Contains(fmt.Sprintf("%v", err), "i/o timeout") {
+			mystromRequestsCounterVec.WithLabelValues(target, ERROR_TIMEOUT.String()).Inc()
+		} else {
+			mystromRequestsCounterVec.WithLabelValues(target, ERROR_PARSING_VALUE.String()).Inc()
+		}
+		http.Error(
+			w,
+			fmt.Sprintf("failed to scrape target '%v': %v", target, err),
+			http.StatusInternalServerError,
+		)
+		log.Error(err)
+		return
+	}
+	mystromDurationCounterVec.WithLabelValues(target).Add(duration)
+	mystromRequestsCounterVec.WithLabelValues(target, OK.String()).Inc()
+
+	promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}).ServeHTTP(w, r)
+}
+
+// -- setupMetrics creates a new registry for the exporter telemetry
+func setupMetrics() *prometheus.Registry {
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(prometheus.NewGoCollector())
+	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+
+	mystromDurationCounterVec = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "request_duration_seconds_total",
+			Help:      "Total duration of mystrom successful requests by target in seconds",
+		},
+		[]string{"target"})
+	registry.MustRegister(mystromDurationCounterVec)
+
+	mystromRequestsCounterVec = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "requests_total",
+			Help:      "Number of mystrom request by status and target",
+		},
+		[]string{"target", "status"})
+	registry.MustRegister(mystromRequestsCounterVec)
+
+	// -- make the build information is available through a metric
+	buildInfo := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "build_info",
+			Help:      "A metric with a constant '1' value labeled by build information.",
+		},
+		[]string{"version", "revision", "branch", "goversion", "builddate", "builduser"},
+	)
+	buildInfo.WithLabelValues(version.Version, version.Revision, version.Branch, version.GoVersion, version.BuildDate, version.BuildUser).Set(1)
+	registry.MustRegister(buildInfo)
+
+	return registry
 }

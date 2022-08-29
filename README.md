@@ -28,9 +28,31 @@ $ ./mystrom-exporter --help
 ```
 | Flag | Description | Default |
 | ---- | ----------- | ------- |
-| switch.ip-address | IP address of the switch you try to monitor | `` |
 | web.listen-address | Address to listen on | `:9452` |
-| web.metrics-path | Path under which to expose metrics | `/metrics` |
+| web.metrics-path | Path under which to expose exporters own metrics | `/metrics` |
+| web.device-path | Path under which the metrics of the devices are fetched | `/device` |
+
+## Prometheus configuration
+A enhancement has been made to have only one exporter which can scrape multiple devices. This is configured in 
+Prometheus as follows assuming we have 4 mystrom devices and the exporter is running locally on the smae machine as 
+the Prometheus.
+```yaml
+ - job_name: mystrom
+   scrape_interval: 30s
+   metrics_path: /device
+   honor_labels: true
+   static_configs:
+   - targets:
+     - '192.168.105.11'
+     - '192.168.105.12'
+     - '192.168.105.13'
+     - '192.168.105.14'
+   relabel_configs:
+     - source_labels: [__address__]
+       target_label: __param_target
+     - target_label: __address__
+       replacement: 127.0.0.1:9452
+```
 
 ## Supported architectures
 Using the make file, you can easily build for the following architectures, those can also be considered the tested ones:
@@ -40,6 +62,7 @@ Using the make file, you can easily build for the following architectures, those
 | Linux | arm64 |
 | Linux | arm |
 | Mac | amd64 |
+| Mac | arm64 |
 
 Since go is cross compatible with windows, and mac arm as well, you should be able to build the binary for those as well, but they aren't tested.  
 The docker image is only built & tested for amd64.

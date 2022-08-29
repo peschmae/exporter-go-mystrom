@@ -2,7 +2,7 @@ FROM golang:alpine as build
 
 WORKDIR /root
 COPY . /root
-RUN go build .
+RUN go install golang.org/x/tools/cmd/stringer@latest && go generate ./... && go build .
 
 FROM alpine:latest
 
