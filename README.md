@@ -4,13 +4,22 @@ Export [myStrom WiFi Switch](https://mystrom.ch/de/wifi-switch-ch/) report
 statistics to [Prometheus](https://prometheus.io).
 
 Metrics are retrieved using the [switch REST api](https://api.mystrom.ch/).
-This has only be testet using a WiFi switch with firmware 3.82.60, but should be 
+This has only be testet using a WiFi switch with firmware 3.82.60, but should be
 backwards compatible with all 3.x firmwares.
 
 To run it:
 ```bash
 $ go build
 $ ./mystrom-exporter [flags]
+```
+
+## Build instructions
+The package uses `stringer` to generate `String()` methods on structs, to build the package you need to install `stringer` through `gotools`.
+
+```bash
+$ go install golang.org/x/tools/cmd/stringer@latest
+# optional, should also be triggered by go build
+$ go generate ./...
 ```
 
 ## Exported Metrics
@@ -30,11 +39,11 @@ $ ./mystrom-exporter --help
 | ---- | ----------- | ------- |
 | web.listen-address | Address to listen on | `:9452` |
 | web.metrics-path | Path under which to expose exporters own metrics | `/metrics` |
-| web.device-path | Path under which the metrics of the devices are fetched | `/device` |
+| web.device-path | Path under which the metrics of the devices are fetched, requires `target` parameter | `/device` |
 
 ## Prometheus configuration
-A enhancement has been made to have only one exporter which can scrape multiple devices. This is configured in 
-Prometheus as follows assuming we have 4 mystrom devices and the exporter is running locally on the smae machine as 
+A enhancement has been made to have only one exporter which can scrape multiple devices. This is configured in
+Prometheus as follows assuming we have 4 mystrom devices and the exporter is running locally on the smae machine as
 the Prometheus.
 ```yaml
  - job_name: mystrom
@@ -64,13 +73,13 @@ Using the make file, you can easily build for the following architectures, those
 | Mac | amd64 |
 | Mac | arm64 |
 
-Since go is cross compatible with windows, and mac arm as well, you should be able to build the binary for those as well, but they aren't tested.  
+Since go is cross compatible with windows, and mac arm as well, you should be able to build the binary for those as well, but they aren't tested.
 The docker image is only built & tested for amd64.
 
 ## Packages
 Packages are built automatically on release, and container images on push to the main branch.
 
-Take a look at the `Releases` or `Packages` tabs on Github.  
+Take a look at the `Releases` or `Packages` tabs on Github.
 
 ### Container images
 There is a multiplatform build available here https://github.com/peschmae/exporter-go-mystrom/pkgs/container/exporter-go-mystrom
