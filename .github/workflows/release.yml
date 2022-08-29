@@ -1,6 +1,6 @@
 # .github/workflows/release.yaml
 
-on: 
+on:
   release:
     types: [created]
 
@@ -9,39 +9,51 @@ jobs:
     name: release linux/amd64
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: wangyoucao577/go-release-action@v1.22
+    - uses: actions/checkout@v3
+    - uses: wangyoucao577/go-release-action@v1.30
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: linux
         goarch: amd64
+        pre_command: |
+          go install golang.org/x/tools/cmd/stringer@latest
+          && go generate ./...
   release-linux-arm64:
     name: release linux/arm64
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: wangyoucao577/go-release-action@v1.22
+    - uses: actions/checkout@v3
+    - uses: wangyoucao577/go-release-action@v1.30
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: linux
         goarch: arm64
+        pre_command: |
+          go install golang.org/x/tools/cmd/stringer@latest
+          && go generate ./...
   release-linux-arm:
     name: release linux/arm
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: wangyoucao577/go-release-action@v1.22
+    - uses: actions/checkout@v3
+    - uses: wangyoucao577/go-release-action@v1.30
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: linux
         goarch: arm
+        pre_command: |
+          go install golang.org/x/tools/cmd/stringer@latest
+          && go generate ./...
   release-darwin-amd64:
     name: release darwin/amd64
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: wangyoucao577/go-release-action@v1.22
+    - uses: actions/checkout@v3
+    - uses: wangyoucao577/go-release-action@v1.30
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: darwin
         goarch: amd64
+        pre_command: |
+          go install golang.org/x/tools/cmd/stringer@latest
+          && go generate ./...
