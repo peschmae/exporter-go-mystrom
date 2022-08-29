@@ -45,9 +45,27 @@ var (
 	mystromRequestsCounterVec *prometheus.CounterVec
 )
 var landingPage = []byte(`<html>
-<head><title>myStrom switch report Exporter</title></head>
+<head>
+	<title>myStrom switch report Exporter</title>
+	<style>
+		label{
+		display:inline-block;
+		width:75px;
+		}
+		form label {
+		margin: 10px;
+		}
+		form input {
+		margin: 10px;
+		}
+	</style>
+</head>
 <body>
 <h1>myStrom Exporter</h1>
+<form action="` + *devicePath + `">
+	<label>Target:</label> <input type="text" name="target" placeholder="X.X.X.X" value="1.2.3.4"><br>
+	<input type="submit" value="Submit">
+</form>
 <p><a href='` + *metricsPath + `'>Metrics</a></p>
 </body>
 </html>`)
