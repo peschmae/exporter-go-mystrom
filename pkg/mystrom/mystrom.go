@@ -142,7 +142,7 @@ func registerMetrics(reg prometheus.Registerer, data switchReport, target string
 		prometheus.GaugeOpts{
 			Namespace: namespace,
 			Name:      "relay",
-			Help:      "The current state of the relay (wether or not the relay is currently turned on)",
+			Help:      "The current state of the relay (whether or not the relay is currently turned on)",
 		},
 		[]string{"instance"})
 
@@ -171,6 +171,21 @@ func registerMetrics(reg prometheus.Registerer, data switchReport, target string
 		}
 
 		collectorPower.WithLabelValues(target).Set(data.Power)
+
+		// --
+		collectorAveragePower := prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Name:      "average_power",
+				Help:      "The average power since the last call. For continuous consumption measurements.",
+			},
+			[]string{"instance"})
+
+		if err := reg.Register(collectorAveragePower); err != nil {
+			return fmt.Errorf("failed to register metric %v: %v", "average_power", err)
+		}
+
+		collectorAveragePower.WithLabelValues(target).Set(data.WattPerSec)
 
 		// --
 		collectorTemperature := prometheus.NewGaugeVec(
