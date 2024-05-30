@@ -3,13 +3,12 @@ package mystrom
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
-	"github.com/prometheus/common/log"
-
 	"github.com/prometheus/client_golang/prometheus"
+	log "github.com/sirupsen/logrus"
 )
 
 const namespace = "mystrom"
@@ -53,15 +52,12 @@ func (e *Exporter) Scrape() (prometheus.Gatherer, error) {
 	// --
 	bodyInfo, err := e.fetchData("/api/v1/info")
 	if err != nil {
+		return nil, fmt.Errorf("unable to connect to target: %v", err.Error())
 	}
 
 	info := switchInfo{}
 	err = json.Unmarshal(bodyInfo, &info)
 	if err != nil {
-		// fmt.Println(err)
-		// ch <- prometheus.MustNewConstMetric(
-		// 	up, prometheus.GaugeValue, 0,
-		// )
 		return reg, fmt.Errorf("unable to decode switchReport: %v", err.Error())
 	}
 	log.Debugf("info: %#v", info)
@@ -74,15 +70,12 @@ func (e *Exporter) Scrape() (prometheus.Gatherer, error) {
 	// --
 	bodyData, err := e.fetchData("/report")
 	if err != nil {
+		return reg, fmt.Errorf("unable to fetch switchReport: %v", err.Error())
 	}
 
 	report := switchReport{}
 	err = json.Unmarshal(bodyData, &report)
 	if err != nil {
-		// fmt.Println(err)
-		// ch <- prometheus.MustNewConstMetric(
-		// 	up, prometheus.GaugeValue, 0,
-		// )
 		return reg, fmt.Errorf("unable to decode switchReport: %v", err.Error())
 	}
 	log.Debugf("report: %#v", report)
@@ -105,30 +98,20 @@ func (e *Exporter) fetchData(urlpath string) ([]byte, error) {
 		},
 	}
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		// ch <- prometheus.MustNewConstMetric(
-		// 	up, prometheus.GaugeValue, 0,
-		// )
-	}
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
 	req.Header.Set("User-Agent", "myStrom-exporter")
 
-	res, getErr := switchClient.Do(req)
-	if getErr != nil {
-		// ch <- prometheus.MustNewConstMetric(
-		// 	up, prometheus.GaugeValue, 0,
-		// )
+	res, err := switchClient.Do(req)
+	if err != nil {
+		return []byte{}, fmt.Errorf("unable to connect to target: %v", err.Error())
 	}
 	if res.Body != nil {
 		defer res.Body.Close()
 	}
 
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		// ch <- prometheus.MustNewConstMetric(
-		// 	up, prometheus.GaugeValue, 0,
-		// )
-		return []byte{}, fmt.Errorf("unable to read body: %v", readErr.Error())
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return []byte{}, fmt.Errorf("unable to read body: %v", err.Error())
 	}
 
 	return body, nil
@@ -142,7 +125,7 @@ func registerMetrics(reg prometheus.Registerer, data switchReport, target string
 		prometheus.GaugeOpts{
 			Namespace: namespace,
 			Name:      "relay",
-			Help:      "The current state of the relay (wether or not the relay is currently turned on)",
+			Help:      "The current state of the relay (whether or not the relay is currently turned on)",
 		},
 		[]string{"instance"})
 
@@ -171,6 +154,21 @@ func registerMetrics(reg prometheus.Registerer, data switchReport, target string
 		}
 
 		collectorPower.WithLabelValues(target).Set(data.Power)
+
+		// --
+		collectorAveragePower := prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Name:      "average_power",
+				Help:      "The average power since the last call. For continuous consumption measurements.",
+			},
+			[]string{"instance"})
+
+		if err := reg.Register(collectorAveragePower); err != nil {
+			return fmt.Errorf("failed to register metric %v: %v", "average_power", err)
+		}
+
+		collectorAveragePower.WithLabelValues(target).Set(data.WattPerSec)
 
 		// --
 		collectorTemperature := prometheus.NewGaugeVec(
