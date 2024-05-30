@@ -1,4 +1,3 @@
-//go:generate stringer -type MystromReqStatus main.go
 package main
 
 import (
@@ -11,8 +10,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/log"
+	log "github.com/sirupsen/logrus"
 
 	"mystrom-exporter/pkg/mystrom"
 	"mystrom-exporter/pkg/version"
@@ -21,6 +21,7 @@ import (
 // -- MystromRequestStatusType represents the request to MyStrom device status
 type MystromReqStatus uint32
 
+//go:generate stringer -type=MystromReqStatus
 const (
 	OK MystromReqStatus = iota
 	ERROR_SOCKET
@@ -112,7 +113,7 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	gatherer, err := exporter.Scrape()
 	duration := time.Since(start).Seconds()
 	if err != nil {
-		if strings.Contains(fmt.Sprintf("%v", err), "unable to connect with target") {
+		if strings.Contains(fmt.Sprintf("%v", err), "unable to connect to target") {
 			mystromRequestsCounterVec.WithLabelValues(target, ERROR_SOCKET.String()).Inc()
 		} else if strings.Contains(fmt.Sprintf("%v", err), "i/o timeout") {
 			mystromRequestsCounterVec.WithLabelValues(target, ERROR_TIMEOUT.String()).Inc()
@@ -136,8 +137,8 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 // -- setupMetrics creates a new registry for the exporter telemetry
 func setupMetrics() *prometheus.Registry {
 	registry := prometheus.NewRegistry()
-	registry.MustRegister(prometheus.NewGoCollector())
-	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	registry.MustRegister(collectors.NewGoCollector())
+	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	mystromDurationCounterVec = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
